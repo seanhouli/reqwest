@@ -193,6 +193,14 @@ impl Part {
 
         let mut mime_type = self.metadata().mime.as_ref();
 
+        if let super::body::Single::Blob(blob) = single {
+            if let Some(file_name) = &self.metadata().file_name {
+                return form.append_with_blob_and_filename(name, blob, file_name);
+            } else {
+                return form.append_with_blob(name, blob);
+            }
+        }
+
         // The JS fetch API doesn't support file names and mime types for strings. So we do our best
         // effort to use `append_with_str` and fallback to `append_with_blob_*` if that's not
         // possible.
@@ -235,6 +243,12 @@ impl Part {
         Blob::new_with_u8_array_sequence_and_options(body_array.as_ref(), &properties)
             .map_err(crate::error::wasm)
             .map_err(crate::error::builder)
+    }
+}
+
+impl From<web_sys::Blob> for Body {
+    fn from(blob: web_sys::Blob) -> Self {
+        Body::from_blob(blob)
     }
 }
 

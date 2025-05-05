@@ -5,6 +5,7 @@ use bytes::Bytes;
 use js_sys::Uint8Array;
 use std::{borrow::Cow, fmt};
 use wasm_bindgen::JsValue;
+use web_sys::Blob;
 
 /// The body of a `Request`.
 ///
@@ -28,13 +29,19 @@ enum Inner {
 pub(crate) enum Single {
     Bytes(Bytes),
     Text(Cow<'static, str>),
+    #[cfg(feature = "multipart")]
+    Blob(Blob),
 }
 
 impl Single {
+    /// Get the contents as a slice.
+    ///
+    /// If a [`Single::Blob`], the contents are not synchronously accessible, so an empty slice is returned.
     fn as_bytes(&self) -> &[u8] {
         match self {
             Single::Bytes(bytes) => bytes.as_ref(),
             Single::Text(text) => text.as_bytes(),
+            Single::Blob(_) => &[],
         }
     }
 
@@ -47,6 +54,7 @@ impl Single {
                 js_value.to_owned()
             }
             Single::Text(text) => JsValue::from_str(text),
+            Single::Blob(blob) => blob.into(),
         }
     }
 
@@ -54,6 +62,7 @@ impl Single {
         match self {
             Single::Bytes(bytes) => bytes.is_empty(),
             Single::Text(text) => text.is_empty(),
+            Single::Blob(_) => false,
         }
     }
 }
@@ -96,6 +105,14 @@ impl Body {
     pub(crate) fn from_form(f: Form) -> Body {
         Self {
             inner: Inner::MultipartForm(f),
+        }
+    }
+
+    #[inline]
+    #[cfg(feature = "multipart")]
+    pub(crate) fn from_blob(b: Blob) -> Body {
+        Self {
+            inner: Inner::Single(Single::Blob(b)),
         }
     }
 
