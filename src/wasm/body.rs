@@ -5,6 +5,7 @@ use bytes::Bytes;
 use js_sys::Uint8Array;
 use std::{borrow::Cow, fmt};
 use wasm_bindgen::JsValue;
+#[cfg(feature = "multipart")]
 use web_sys::Blob;
 
 /// The body of a `Request`.
@@ -41,6 +42,7 @@ impl Single {
         match self {
             Single::Bytes(bytes) => bytes.as_ref(),
             Single::Text(text) => text.as_bytes(),
+            #[cfg(feature = "multipart")]
             Single::Blob(_) => &[],
         }
     }
@@ -54,6 +56,7 @@ impl Single {
                 js_value.to_owned()
             }
             Single::Text(text) => JsValue::from_str(text),
+            #[cfg(feature = "multipart")]
             Single::Blob(blob) => blob.into(),
         }
     }
@@ -62,7 +65,8 @@ impl Single {
         match self {
             Single::Bytes(bytes) => bytes.is_empty(),
             Single::Text(text) => text.is_empty(),
-            Single::Blob(_) => false,
+            #[cfg(feature = "multipart")]
+            Single::Blob(blob) => blob.size() == 0.0,
         }
     }
 }
