@@ -246,12 +246,6 @@ impl Part {
     }
 }
 
-impl From<web_sys::Blob> for Body {
-    fn from(blob: web_sys::Blob) -> Self {
-        Body::from_blob(blob)
-    }
-}
-
 impl fmt::Debug for Part {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut dbg = f.debug_struct("Part");
@@ -349,7 +343,7 @@ mod tests {
         use super::{Form, Part};
         use js_sys::Uint8Array;
         use wasm_bindgen::JsValue;
-        use web_sys::{File, FormData, BlobPropertyBag};
+        use web_sys::{BlobPropertyBag, File, FormData};
 
         let text_file_name = "test.txt";
         let text_file_type = "text/plain";

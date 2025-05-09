@@ -5,7 +5,6 @@ use bytes::Bytes;
 use js_sys::Uint8Array;
 use std::{borrow::Cow, fmt};
 use wasm_bindgen::JsValue;
-#[cfg(feature = "multipart")]
 use web_sys::Blob;
 
 /// The body of a `Request`.
@@ -30,7 +29,6 @@ enum Inner {
 pub(crate) enum Single {
     Bytes(Bytes),
     Text(Cow<'static, str>),
-    #[cfg(feature = "multipart")]
     Blob(Blob),
 }
 
@@ -42,7 +40,6 @@ impl Single {
         match self {
             Single::Bytes(bytes) => bytes.as_ref(),
             Single::Text(text) => text.as_bytes(),
-            #[cfg(feature = "multipart")]
             Single::Blob(_) => &[],
         }
     }
@@ -56,7 +53,6 @@ impl Single {
                 js_value.to_owned()
             }
             Single::Text(text) => JsValue::from_str(text),
-            #[cfg(feature = "multipart")]
             Single::Blob(blob) => blob.into(),
         }
     }
@@ -65,7 +61,6 @@ impl Single {
         match self {
             Single::Bytes(bytes) => bytes.is_empty(),
             Single::Text(text) => text.is_empty(),
-            #[cfg(feature = "multipart")]
             Single::Blob(blob) => blob.size() == 0.0,
         }
     }
@@ -113,7 +108,6 @@ impl Body {
     }
 
     #[inline]
-    #[cfg(feature = "multipart")]
     pub(crate) fn from_blob(b: Blob) -> Body {
         Self {
             inner: Inner::Single(Single::Blob(b)),
@@ -194,6 +188,12 @@ impl From<&'static str> for Body {
         Body {
             inner: Inner::Single(Single::Text(s.into())),
         }
+    }
+}
+
+impl From<Blob> for Body {
+    fn from(blob: Blob) -> Self {
+        Body::from_blob(blob)
     }
 }
 
@@ -329,5 +329,56 @@ mod tests {
         let v = Uint8Array::new(&array_buffer).to_vec();
 
         assert_eq!(v, body_value);
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_body_js_blob() {
+        let blob_data = vec![0u8, 42];
+
+        let options = web_sys::BlobPropertyBag::new();
+        let blob_type = "image/jpeg";
+        options.set_type(blob_type);
+
+        let uint8_array: JsValue = js_sys::Uint8Array::from(blob_data.as_slice()).into();
+        let file_bits_array = js_sys::Array::of1(&uint8_array);
+        let blob =
+            web_sys::Blob::new_with_u8_array_sequence_and_options(&file_bits_array, &options)
+                .unwrap();
+
+        let blob_type = blob.type_().clone();
+        let blob_size = blob.size();
+
+        let body: Body = blob.into();
+
+        let mut init = web_sys::RequestInit::new();
+        init.method(http::Method::POST.as_str());
+        init.body(Some(
+            body.to_js_value()
+                .expect("could not convert body to JsValue")
+                .as_ref(),
+        ));
+
+        let js_req = web_sys::Request::new_with_str_and_init("", &init)
+            .expect("could not create JS request");
+
+        let array_buffer_promise = js_req
+            .array_buffer()
+            .expect("could not get array_buffer promise");
+        let array_buffer = crate::wasm::promise::<JsValue>(array_buffer_promise)
+            .await
+            .expect("could not get request body as array buffer");
+
+        let arr = Uint8Array::new(&array_buffer);
+        let v = arr.to_vec();
+
+        let blob_result = web_sys::Blob::new_with_u8_array_sequence_and_options(
+            &js_sys::Array::of1(&arr),
+            &options,
+        )
+        .unwrap();
+
+        assert_eq!(blob_data, v);
+        assert_eq!(blob_result.type_(), blob_type);
+        assert_eq!(blob_result.size(), blob_size);
     }
 }
